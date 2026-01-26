@@ -63,7 +63,7 @@ defmodule Backpex.Adapters.EctoTest do
     def render_form(assigns), do: assigns
   end
 
-  describe "apply_search/4 (without full text search configured)" do
+  describe "apply_search/5 (without full text search configured)" do
     test "adds ilike condition for one field" do
       base_query = from(TestUser, as: ^EctoAdapter.name_by_schema(TestUser))
 
@@ -71,7 +71,7 @@ defmodule Backpex.Adapters.EctoTest do
         {:title, %{module: Backpex.Fields.Text, queryable: TestUser}}
       ]
 
-      query = EctoAdapter.apply_search(base_query, TestUser, nil, {"foo", searchable_fields})
+      query = EctoAdapter.apply_search(base_query, TestUser, nil, nil, {"foo", searchable_fields})
 
       assert [%{expr: ilike_expr}] = query.wheres
       assert match?({:ilike, _, _}, ilike_expr)
@@ -88,7 +88,7 @@ defmodule Backpex.Adapters.EctoTest do
         {:name, %{module: Backpex.Fields.Text, queryable: TestUser}}
       ]
 
-      query = EctoAdapter.apply_search(base_query, TestUser, nil, {"bar", searchable_fields})
+      query = EctoAdapter.apply_search(base_query, TestUser, nil, nil, {"bar", searchable_fields})
 
       assert [%{expr: or_expr}] = query.wheres
       assert match?({:or, _, _}, or_expr)
@@ -101,7 +101,7 @@ defmodule Backpex.Adapters.EctoTest do
     test "returns original query when no searchable fields provided" do
       base_query = from(TestUser, as: ^EctoAdapter.name_by_schema(TestUser))
 
-      query = EctoAdapter.apply_search(base_query, TestUser, nil, {"baz", []})
+      query = EctoAdapter.apply_search(base_query, TestUser, nil, nil, {"baz", []})
 
       assert query == base_query
     end
@@ -113,7 +113,7 @@ defmodule Backpex.Adapters.EctoTest do
         {:title, %{module: Backpex.Fields.Text, queryable: TestUser}}
       ]
 
-      query = EctoAdapter.apply_search(base_query, TestUser, nil, {"", searchable_fields})
+      query = EctoAdapter.apply_search(base_query, TestUser, nil, nil, {"", searchable_fields})
 
       assert query == base_query
     end
@@ -127,7 +127,7 @@ defmodule Backpex.Adapters.EctoTest do
         {:name_display, %{module: Backpex.Fields.Text, select: select_expr}}
       ]
 
-      query = EctoAdapter.apply_search(base_query, TestUser, nil, {"qux", searchable_fields})
+      query = EctoAdapter.apply_search(base_query, TestUser, nil, nil, {"qux", searchable_fields})
 
       assert [%{expr: ilike_expr}] = query.wheres
       assert match?({:ilike, _, _}, ilike_expr)
@@ -138,11 +138,11 @@ defmodule Backpex.Adapters.EctoTest do
     end
   end
 
-  describe "apply_search/4 (with full text search configured)" do
+  describe "apply_search/5 (with full text search configured)" do
     test "returns original query on empty search string" do
       base_query = from(TestUser)
 
-      query = EctoAdapter.apply_search(base_query, TestUser, :title, {"", []})
+      query = EctoAdapter.apply_search(base_query, TestUser, :title, nil, {"", []})
 
       assert query == base_query
     end
@@ -150,7 +150,7 @@ defmodule Backpex.Adapters.EctoTest do
     test "adds tsquery fragment for non-empty search string" do
       base_query = from(TestUser, as: ^EctoAdapter.name_by_schema(TestUser))
 
-      query = EctoAdapter.apply_search(base_query, TestUser, :title, {"hello world", []})
+      query = EctoAdapter.apply_search(base_query, TestUser, :title, nil, {"hello world", []})
 
       assert [%{expr: fragment_expr}] = query.wheres
       assert match?({:fragment, _, _}, fragment_expr)
@@ -158,6 +158,31 @@ defmodule Backpex.Adapters.EctoTest do
       expr_str = Macro.to_string(fragment_expr)
       assert expr_str =~ "websearch_to_tsquery"
       assert expr_str =~ "@@"
+      assert expr_str =~ "title"
+    end
+  end
+
+  describe "apply_search/5 (with pg_textsearch configured)" do
+    test "returns original query on empty search string" do
+      base_query = from(TestUser)
+
+      query = EctoAdapter.apply_search(base_query, TestUser, nil, {"title", "users_title_bm25_idx"}, {"", []})
+
+      assert query == base_query
+    end
+
+    test "adds tsquery fragment for non-empty search string" do
+      base_query = from(TestUser, as: ^EctoAdapter.name_by_schema(TestUser))
+
+      query =
+        EctoAdapter.apply_search(base_query, TestUser, nil, {"title", "users_title_bm25_idx"}, {"hello world", []})
+
+      assert [%{expr: fragment_expr}] = query.order_bys
+      assert match?([asc: {:fragment, _, _}], fragment_expr)
+
+      expr_str = Macro.to_string(fragment_expr)
+      assert expr_str =~ "to_bm25query"
+      assert expr_str =~ "<@>"
       assert expr_str =~ "title"
     end
   end
@@ -292,7 +317,7 @@ defmodule Backpex.Adapters.EctoTest do
     end
   end
 
-  describe "apply_filters/4" do
+  describe "apply_filters/5" do
     test "returns original query when filters list is empty" do
       base_query = from(TestUser, as: ^EctoAdapter.name_by_schema(TestUser))
 

@@ -198,12 +198,15 @@ defmodule Backpex.HTML.Resource do
     doc: "The fields that can be searched. Here only used to hide the component when empty."
 
   attr :full_text_search, :string, default: nil, doc: "full text search column name"
+  attr :pg_textsearch, :string, default: nil, doc: "pg_textsearch search index name"
   attr :value, :string, required: true, doc: "value binding for the search input"
   attr :placeholder, :string, required: true, doc: "placeholder for the search input"
 
   def index_search_form(assigns) do
     form = to_form(%{"value" => assigns.value}, as: :index_search)
-    search_enabled = not is_nil(assigns.full_text_search) or assigns.searchable_fields != []
+
+    search_enabled =
+      not is_nil(assigns.full_text_search) or assigns.searchable_fields != [] or not is_nil(assigns.pg_textsearch)
 
     assigns =
       assigns
@@ -900,6 +903,7 @@ defmodule Backpex.HTML.Resource do
       <.index_search_form
         searchable_fields={@searchable_fields}
         full_text_search={@live_resource.config(:full_text_search)}
+        pg_textsearch={@live_resource.config(:pg_textsearch)}
         value={Map.get(@query_options, :search, "")}
         placeholder={@search_placeholder}
       />

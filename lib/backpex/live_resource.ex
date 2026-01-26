@@ -96,6 +96,11 @@ defmodule Backpex.LiveResource do
       type: :atom,
       default: nil
     ],
+    pg_textsearch: [
+      doc: "The column name and index name used for full text search.",
+      type: {:tuple, [:string, :string]},
+      required: false
+    ],
     save_and_continue_button?: [
       doc: "If the \"Save & Continue editing\" button is shown on form views.",
       type: :boolean,

@@ -119,6 +119,7 @@ defmodule Backpex.Adapters.Ecto do
     schema = live_resource.adapter_config(:schema)
     item_query = live_resource.adapter_config(:item_query)
     full_text_search = live_resource.config(:full_text_search)
+    pg_textsearch = live_resource.config(:pg_textsearch)
     associations = associations(fields, schema)
 
     schema
@@ -127,23 +128,23 @@ defmodule Backpex.Adapters.Ecto do
     |> maybe_join(associations)
     |> maybe_preload(associations, fields)
     |> maybe_merge_dynamic_fields(fields)
-    |> apply_search(schema, full_text_search, criteria[:search])
+    |> apply_search(schema, full_text_search, pg_textsearch, criteria[:search])
     |> apply_filters(criteria[:filters], Backpex.LiveResource.empty_filter_key(), assigns)
     |> apply_criteria(criteria, fields)
   end
 
-  def apply_search(query, _schema, nil, {_search_string, []}), do: query
+  def apply_search(query, _schema, nil, nil, {_search_string, []}), do: query
 
-  def apply_search(query, _schema, nil, {"", _searchable_fields}), do: query
+  def apply_search(query, _schema, nil, nil, {"", _searchable_fields}), do: query
 
-  def apply_search(query, _schema, nil, {search_string, searchable_fields}) do
+  def apply_search(query, _schema, nil, nil, {search_string, searchable_fields}) do
     search_string = "%#{search_string}%"
 
     conditions = search_conditions(searchable_fields, search_string)
     where(query, ^conditions)
   end
 
-  def apply_search(query, schema, full_text_search, {search_string, _searchable_fields}) do
+  def apply_search(query, schema, full_text_search, nil, {search_string, _searchable_fields}) do
     case search_string do
       "" ->
         query
@@ -155,6 +156,22 @@ defmodule Backpex.Adapters.Ecto do
           query,
           [{^schema_name, schema_name}],
           fragment("? @@ websearch_to_tsquery(?)", field(schema_name, ^full_text_search), ^search)
+        )
+    end
+  end
+
+  def apply_search(query, schema, _full_text_search, {pg_ts_column, pg_ts_index}, {search_string, _searchable_fields}) do
+    case search_string do
+      "" ->
+        query
+
+      search ->
+        schema_name = name_by_schema(schema)
+
+        order_by(
+          query,
+          [{^schema_name, schema_name}],
+          fragment("? <@> to_bm25query(?, ?)", field(schema_name, ^pg_ts_column), ^search, ^pg_ts_index)
         )
     end
   end
